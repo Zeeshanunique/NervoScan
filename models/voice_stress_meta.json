@@ -1,0 +1,67 @@
+{
+  "model_name": "SVM",
+  "feature_count": 34,
+  "sample_count": 1440,
+  "class_distribution": {
+    "Low": 288,
+    "Moderate": 576,
+    "High": 576
+  },
+  "stress_labels": {
+    "0": "Low",
+    "1": "Moderate",
+    "2": "High"
+  },
+  "cross_validation": {
+    "GradientBoosting": {
+      "mean_accuracy": 0.7576,
+      "std_accuracy": 0.0136
+    },
+    "RandomForest": {
+      "mean_accuracy": 0.7299,
+      "std_accuracy": 0.0366
+    },
+    "SVM": {
+      "mean_accuracy": 0.7972,
+      "std_accuracy": 0.0243
+    }
+  },
+  "inference_latency_ms": 0.151,
+  "feature_names": [
+    "mfcc_mean_0",
+    "mfcc_mean_1",
+    "mfcc_mean_2",
+    "mfcc_mean_3",
+    "mfcc_mean_4",
+    "mfcc_mean_5",
+    "mfcc_mean_6",
+    "mfcc_mean_7",
+    "mfcc_mean_8",
+    "mfcc_mean_9",
+    "mfcc_mean_10",
+    "mfcc_mean_11",
+    "mfcc_mean_12",
+    "mfcc_std_0",
+    "mfcc_std_1",
+    "mfcc_std_2",
+    "mfcc_std_3",
+    "mfcc_std_4",
+    "mfcc_std_5",
+    "mfcc_std_6",
+    "mfcc_std_7",
+    "mfcc_std_8",
+    "mfcc_std_9",
+    "mfcc_std_10",
+    "mfcc_std_11",
+    "mfcc_std_12",
+    "pitch_mean",
+    "pitch_std",
+    "energy_mean",
+    "energy_std",
+    "jitter",
+    "spectral_centroid",
+    "spectral_rolloff",
+    "voiced_ratio"
+  ],
+  "trained_at": "2026-02-10 12:52:32"
+}

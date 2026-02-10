@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+*.egg-info/
+dist/
+build/
+
+# Node
+node_modules/
+.next/
+out/
+.env.local
+.env*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+*.env
+
+# ML models (large files)
+*.h5
+*.pt
+*.onnx
+models/*.tflite
+models/*.bin
+
+# RAVDESS dataset (large, re-downloadable)
+models/data/
+
+# Keep trained model files (small, needed for inference)
+# models/voice_stress_model.joblib  (~307KB, committed)
+# models/voice_stress_meta.json     (~1.3KB, committed)
+
+# Reports
+*.pdf
+exports/
