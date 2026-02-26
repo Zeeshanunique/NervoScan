@@ -21,6 +21,15 @@ class Settings(BaseSettings):
     assessment_duration_sec: int = 60
     update_interval_sec: int = 5
 
+    # Auth
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    frontend_url: str = "http://localhost:3000"
+    backend_url: str = "http://localhost:8000"
+    jwt_secret: str = "nervoscan-jwt-secret-change-in-production"
+    jwt_algorithm: str = "HS256"
+    jwt_expire_minutes: int = 60 * 24 * 7  # 7 days
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

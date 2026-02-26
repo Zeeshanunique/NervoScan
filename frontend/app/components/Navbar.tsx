@@ -4,15 +4,56 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
 import { getLocale, setLocale, t, type Locale, LOCALES } from "@/app/lib/i18n";
+import { getStoredToken, clearStoredToken } from "@/app/lib/auth";
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+interface AuthUser {
+  user_id: string;
+  name: string | null;
+  email: string | null;
+  avatar_url: string | null;
+}
 
 export default function Navbar() {
   const pathname = usePathname();
   const [locale, setLoc] = useState<Locale>("en");
   const [langOpen, setLangOpen] = useState(false);
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [authLoaded, setAuthLoaded] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setLoc(getLocale());
+  }, []);
+
+  useEffect(() => {
+    const token = getStoredToken();
+    if (!token) {
+      setUser(null);
+      setAuthLoaded(true);
+      return;
+    }
+    fetch(`${API_URL}/auth/me?token=${encodeURIComponent(token)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => setUser(data))
+      .catch(() => setUser(null))
+      .finally(() => setAuthLoaded(true));
+  }, [pathname]);
+
+  useEffect(() => {
+    const handler = () => {
+      const token = getStoredToken();
+      if (!token) setUser(null);
+      else {
+        fetch(`${API_URL}/auth/me?token=${encodeURIComponent(token)}`)
+          .then((r) => (r.ok ? r.json() : null))
+          .then((data) => setUser(data))
+          .catch(() => setUser(null));
+      }
+    };
+    window.addEventListener("nervoscan-auth-change", handler);
+    return () => window.removeEventListener("nervoscan-auth-change", handler);
   }, []);
 
   useEffect(() => {
@@ -29,6 +70,12 @@ export default function Navbar() {
     setLocale(l);
     setLoc(l);
     setLangOpen(false);
+  };
+
+  const handleLogout = () => {
+    clearStoredToken();
+    setUser(null);
+    window.dispatchEvent(new CustomEvent("nervoscan-auth-change"));
   };
 
   const links = [
@@ -68,6 +115,44 @@ export default function Navbar() {
               <span className="hidden sm:inline">{link.label}</span>
             </Link>
           ))}
+
+          {authLoaded && (
+            <>
+              {user ? (
+                <div className="flex items-center gap-2 ml-2">
+                  <div className="flex items-center gap-2 px-2 py-1 rounded-lg bg-slate-800/80">
+                    {user.avatar_url ? (
+                      <img src={user.avatar_url} alt="" className="w-6 h-6 rounded-full" />
+                    ) : (
+                      <div className="w-6 h-6 rounded-full bg-indigo-500/50 flex items-center justify-center text-xs font-medium text-indigo-300">
+                        {(user.name || user.email || "?")[0].toUpperCase()}
+                      </div>
+                    )}
+                    <span className="hidden sm:inline text-sm text-slate-300 max-w-[120px] truncate">
+                      {user.name || user.email || "User"}
+                    </span>
+                  </div>
+                  <button
+                    onClick={handleLogout}
+                    className="px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors"
+                  >
+                    {t("nav.logout", locale)}
+                  </button>
+                </div>
+              ) : (
+                <Link
+                  href="/login"
+                  className={`ml-2 flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm transition-colors ${
+                    pathname === "/login"
+                      ? "bg-indigo-500/10 text-indigo-400"
+                      : "text-slate-400 hover:text-slate-200 hover:bg-slate-800"
+                  }`}
+                >
+                  {t("nav.login", locale)}
+                </Link>
+              )}
+            </>
+          )}
 
           <div className="relative ml-2" ref={dropdownRef}>
             <button

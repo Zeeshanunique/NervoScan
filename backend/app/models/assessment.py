@@ -10,7 +10,11 @@ class User(Base):
     __tablename__ = "users"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    anonymous_id = Column(String(64), unique=True, nullable=False, index=True)
+    anonymous_id = Column(String(128), unique=True, nullable=False, index=True)
+    google_id = Column(String(128), unique=True, nullable=True, index=True)
+    email = Column(String(255), nullable=True)
+    name = Column(String(255), nullable=True)
+    avatar_url = Column(String(512), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     locale = Column(String(10), default="en")
 

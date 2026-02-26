@@ -11,6 +11,7 @@ from app.config import get_settings
 from app.database import init_db
 from app.api.assessment import router as assessment_router
 from app.api.reports import router as reports_router
+from app.api.auth import router as auth_router
 
 settings = get_settings()
 
@@ -43,6 +44,7 @@ app.add_middleware(
 # Routers
 app.include_router(assessment_router)
 app.include_router(reports_router)
+app.include_router(auth_router)
 
 
 @app.get("/", tags=["Health"])
