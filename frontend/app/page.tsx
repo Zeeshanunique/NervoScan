@@ -9,6 +9,9 @@ export default function HomePage() {
 
   useEffect(() => {
     setLocale(getLocale());
+    const handler = () => setLocale(getLocale());
+    window.addEventListener("nervoscan-locale-change", handler);
+    return () => window.removeEventListener("nervoscan-locale-change", handler);
   }, []);
 
   return (

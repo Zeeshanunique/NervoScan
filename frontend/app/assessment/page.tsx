@@ -72,6 +72,9 @@ export default function AssessmentPage() {
       anonId = "anon-" + Math.random().toString(36).substring(2, 15);
       localStorage.setItem("nervoscan-anon-id", anonId);
     }
+    const handler = () => setLoc(getLocale());
+    window.addEventListener("nervoscan-locale-change", handler);
+    return () => window.removeEventListener("nervoscan-locale-change", handler);
   }, []);
 
   const cleanup = useCallback(() => {

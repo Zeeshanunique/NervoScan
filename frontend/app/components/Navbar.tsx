@@ -2,21 +2,33 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState, useEffect } from "react";
-import { getLocale, setLocale, t, type Locale } from "@/app/lib/i18n";
+import { useState, useEffect, useRef } from "react";
+import { getLocale, setLocale, t, type Locale, LOCALES } from "@/app/lib/i18n";
 
 export default function Navbar() {
   const pathname = usePathname();
   const [locale, setLoc] = useState<Locale>("en");
+  const [langOpen, setLangOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setLoc(getLocale());
   }, []);
 
-  const toggleLocale = () => {
-    const newLocale = locale === "en" ? "hi" : "en";
-    setLocale(newLocale);
-    setLoc(newLocale);
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setLangOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const selectLocale = (l: Locale) => {
+    setLocale(l);
+    setLoc(l);
+    setLangOpen(false);
   };
 
   const links = [
@@ -57,12 +69,31 @@ export default function Navbar() {
             </Link>
           ))}
 
-          <button
-            onClick={toggleLocale}
-            className="ml-2 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-slate-800 text-slate-300 hover:bg-slate-700 transition-colors border border-slate-700"
-          >
-            {locale === "en" ? "हिं" : "EN"}
-          </button>
+          <div className="relative ml-2" ref={dropdownRef}>
+            <button
+              onClick={() => setLangOpen(!langOpen)}
+              className="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-slate-800 text-slate-300 hover:bg-slate-700 transition-colors border border-slate-700 flex items-center gap-1"
+            >
+              {LOCALES.find((l) => l.code === locale)?.label || locale.toUpperCase()}
+              <svg className={`w-3 h-3 transition-transform ${langOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            {langOpen && (
+              <div className="absolute right-0 mt-1 py-1 w-36 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50">
+                {LOCALES.map((l) => (
+                  <button
+                    key={l.code}
+                    onClick={() => selectLocale(l.code)}
+                    className={`w-full px-3 py-2 text-left text-sm hover:bg-slate-700 transition-colors ${locale === l.code ? "text-indigo-400 bg-slate-700/50" : "text-slate-300"}`}
+                  >
+                    <span className="font-medium">{l.label}</span>
+                    <span className="text-slate-500 text-xs ml-2">{l.name}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </nav>

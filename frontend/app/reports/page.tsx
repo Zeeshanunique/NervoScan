@@ -48,6 +48,9 @@ export default function ReportsPage() {
   useEffect(() => {
     setLoc(getLocale());
     loadReports();
+    const handler = () => setLoc(getLocale());
+    window.addEventListener("nervoscan-locale-change", handler);
+    return () => window.removeEventListener("nervoscan-locale-change", handler);
   }, []);
 
   const loadReports = async () => {
