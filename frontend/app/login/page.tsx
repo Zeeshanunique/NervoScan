@@ -40,7 +40,12 @@ export default function LoginPage() {
   }, [searchParams]);
 
   const error = searchParams.get("error");
-  const errorMsg = error ? (ERROR_MESSAGES[error] || error) : null;
+  const detail = searchParams.get("detail");
+  const errorMsg = error
+    ? detail
+      ? `${ERROR_MESSAGES[error] || error}: ${decodeURIComponent(detail)}`
+      : (ERROR_MESSAGES[error] || error)
+    : null;
 
   const handleGoogleLogin = () => {
     window.location.href = `${API_URL}/auth/google`;

@@ -1,15 +1,30 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, Float, Boolean, DateTime, Integer, JSON, Text, ForeignKey
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Column, String, Float, Boolean, DateTime, Integer, JSON, Text, ForeignKey, TypeDecorator
 from sqlalchemy.orm import relationship
 from app.database import Base
+
+
+class GUID(TypeDecorator):
+    """Portable UUID type for SQLite and PostgreSQL."""
+    impl = String(36)
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return None
+        return str(value) if isinstance(value, uuid.UUID) else value
+
+    def process_result_value(self, value, dialect):
+        if value is None:
+            return None
+        return uuid.UUID(value) if isinstance(value, str) else value
 
 
 class User(Base):
     __tablename__ = "users"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(GUID, primary_key=True, default=uuid.uuid4)
     anonymous_id = Column(String(128), unique=True, nullable=False, index=True)
     google_id = Column(String(128), unique=True, nullable=True, index=True)
     email = Column(String(255), nullable=True)
@@ -24,8 +39,8 @@ class User(Base):
 class Assessment(Base):
     __tablename__ = "assessments"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    id = Column(GUID, primary_key=True, default=uuid.uuid4)
+    user_id = Column(GUID, ForeignKey("users.id"), nullable=False, index=True)
     started_at = Column(DateTime, default=datetime.utcnow)
     completed_at = Column(DateTime, nullable=True)
     duration_sec = Column(Integer, default=60)
@@ -55,8 +70,8 @@ class AssessmentSnapshot(Base):
     """5-second interval snapshots during recording."""
     __tablename__ = "assessment_snapshots"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    assessment_id = Column(UUID(as_uuid=True), ForeignKey("assessments.id"), nullable=False, index=True)
+    id = Column(GUID, primary_key=True, default=uuid.uuid4)
+    assessment_id = Column(GUID, ForeignKey("assessments.id"), nullable=False, index=True)
     timestamp_sec = Column(Integer, nullable=False)  # 5, 10, 15...60
 
     stress_score = Column(Float, nullable=True)

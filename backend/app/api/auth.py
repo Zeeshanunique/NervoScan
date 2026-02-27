@@ -1,8 +1,11 @@
 """Google OAuth login and JWT session handling."""
+import logging
 import secrets
 import uuid
 from datetime import datetime, timedelta
-from urllib.parse import urlencode
+
+logger = logging.getLogger(__name__)
+from urllib.parse import urlencode, quote
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from fastapi.responses import RedirectResponse
@@ -99,8 +102,18 @@ async def auth_google_callback(
             headers={"Content-Type": "application/x-www-form-urlencoded"},
         )
         if token_res.status_code != 200:
+            err_body = token_res.text
+            logger.warning(
+                "Google token exchange failed: status=%s body=%s redirect_uri=%s",
+                token_res.status_code, err_body, redirect_uri,
+            )
+            try:
+                err_json = token_res.json()
+                err_msg = err_json.get("error_description", err_json.get("error", "unknown"))
+            except Exception:
+                err_msg = "token_exchange"
             return RedirectResponse(
-                url=f"{settings.frontend_url}/login?error=token_exchange",
+                url=f"{settings.frontend_url}/login?error=token_exchange&detail={quote(str(err_msg))}",
                 status_code=status.HTTP_302_FOUND,
             )
         tokens = token_res.json()
