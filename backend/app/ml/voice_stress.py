@@ -13,6 +13,8 @@ from typing import Optional
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 _MODEL_PATH = _PROJECT_ROOT / "models" / "voice_stress_model.joblib"
 
+_META_PATH = _PROJECT_ROOT / "models" / "voice_stress_meta.json"
+
 STRESS_LABELS = {0: "Low", 1: "Moderate", 2: "High"}
 
 
@@ -20,6 +22,7 @@ class VoiceStressAnalyzer:
     def __init__(self):
         self._model = None
         self._model_loaded = False
+        self._meta = None
         self._load_model()
 
     def _load_model(self):
@@ -36,6 +39,55 @@ class VoiceStressAnalyzer:
             print(f"[ML] Failed to load voice stress model: {e} — using heuristic fallback")
             self._model = None
             self._model_loaded = False
+
+        # Load and print accuracy report
+        self._load_meta()
+        self.print_accuracy_report()
+
+    def _load_meta(self):
+        """Load model metadata from voice_stress_meta.json."""
+        try:
+            if _META_PATH.exists():
+                import json
+                with open(_META_PATH, "r") as f:
+                    self._meta = json.load(f)
+        except Exception as e:
+            print(f"[ML] Failed to load model metadata: {e}")
+            self._meta = None
+
+    def print_accuracy_report(self):
+        """Print model accuracy metrics to terminal/console."""
+        print("\n" + "=" * 60)
+        print("  NervoScan ML Model — Accuracy Report")
+        print("=" * 60)
+
+        if self._meta:
+            cv = self._meta.get("cross_validation", {})
+            print(f"\n  Model Type     : {self._meta.get('model_name', 'Unknown')}")
+            print(f"  Features       : {self._meta.get('feature_count', 'N/A')}")
+            print(f"  Training Data  : {self._meta.get('sample_count', 'N/A')} samples")
+            print(f"  Trained At     : {self._meta.get('trained_at', 'N/A')}")
+            print(f"  Inference Time : {self._meta.get('inference_latency_ms', 'N/A')}ms")
+
+            dist = self._meta.get("class_distribution", {})
+            if dist:
+                print(f"\n  Class Distribution:")
+                for label, count in dist.items():
+                    print(f"    {label:>10s} : {count} samples")
+
+            if cv:
+                print(f"\n  Cross‑Validation Accuracy:")
+                for model_name, metrics in cv.items():
+                    mean_acc = metrics.get("mean_accuracy", 0) * 100
+                    std_acc = metrics.get("std_accuracy", 0) * 100
+                    marker = " ◀ SELECTED" if model_name == self._meta.get("model_name") else ""
+                    print(f"    {model_name:>20s} : {mean_acc:.1f}% (±{std_acc:.1f}%){marker}")
+        else:
+            print("\n  No model metadata found. Using heuristic fallback.")
+            print("  Accuracy: N/A (rule-based scoring)")
+
+        print(f"\n  Model Status   : {'✅ Loaded' if self._model_loaded else '⚠️  Heuristic fallback'}")
+        print("=" * 60 + "\n")
 
     def extract_features(self, audio_data: np.ndarray, sample_rate: int = 48000) -> dict:
         """Extract voice features from raw audio samples."""

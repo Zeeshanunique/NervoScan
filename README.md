@@ -4,6 +4,18 @@ Privacy-aware, offline-first stress detection PWA. Records voice + face for 60 s
 
 ---
 
+## Key Features
+
+- **Multimodal Stress Detection**: Analyzes voice (MFCCs, pitch), facial tension (MediaPipe landmarks), and keystroke dynamics in real time.
+- **Privacy-First & Offline-Capable**: All biometric data is processed locally. No audio/video recordings are stored. Terms & Conditions are explicitly agreed to before use.
+- **Global Multilingual Support**: Available in 12 languages (English, Hindi, Kannada, Telugu, Tamil, Malayalam, Arabic, Spanish, French, Portuguese, Bengali, Urdu).
+- **AI Wellness Assistant**: Integrated Google Gemini 2.5 Flash chatbot offering personalized stress management techniques and breathing exercises.
+- **Admin Dashboard**: High-level views of user engagement, assessment history, stress distribution, and ML model accuracy mapping (SVM ~79.7%).
+- **Assessment Control**: Pause, resume, or stop the 60-second assessment at any point.
+- **Comprehensive Reports**: Daily/weekly trends, spoof detection (voice-face mismatch), and PDF/CSV exports.
+
+---
+
 ## Architecture
 
 ```
@@ -13,6 +25,7 @@ Privacy-aware, offline-first stress detection PWA. Records voice + face for 60 s
  ├─ Keystroke dynamics tracker
  ├─ Offline stress engine (local inference)
  ├─ Live Recharts (5s updates)
+ ├─ Google Gemini Chatbot (Next.js API proxy)
  └─ Service Worker (offline-first)
 
         ↓ WebSocket (real-time)
@@ -20,6 +33,7 @@ Privacy-aware, offline-first stress detection PWA. Records voice + face for 60 s
 
 [Backend — FastAPI]
  ├─ Assessment API (start / live / final)
+ ├─ Admin API (dashboard / users / stats)
  ├─ Spoof detection (voice-face mismatch)
  ├─ Report generator (PDF / CSV)
  ├─ Swagger UI (/docs)
@@ -74,6 +88,8 @@ uvicorn app.main:app --reload --port 8000
 ```bash
 cd frontend
 npm install
+cp .env.local.example .env.local
+# Add your Google Gemini API key to .env.local: GEMINI_API_KEY=your_key_here
 npm run dev
 ```
 
@@ -83,10 +99,12 @@ Open http://localhost:3000.
 
 ## User Flow
 
-1. **Start Assessment** — click the button, grant camera + mic access
-2. **60s Recording** — voice, face, and keystroke data captured; stress gauge, live chart, and pitch heatmap update every 5 seconds
-3. **Final Analysis** — backend runs ensemble model + spoof detection, returns score, level, confidence, and recommendations
-4. **Reports** — view daily/weekly/monthly stress trends, export PDF or CSV
+1. **Accept Terms** — mandatory Terms & Conditions gate to ensure privacy compliance
+2. **Start Assessment** — grant camera + mic access
+3. **Recording (up to 60s)** — voice, face, and keystrokes captured; live chart updates every 5s. User can **Pause**, **Resume**, or **Stop** early
+4. **Final Analysis** — backend runs ensemble model + spoof detection, returns score, level, confidence, and recommendations
+5. **Reports** — view trend graphs, chat with the AI Assistant for advice, or export data
+6. **Admin Dashboard** — admins can monitor overall system metrics, model accuracy, and user assessments
 
 ---
 
@@ -162,7 +180,7 @@ NervoScan/
 
 | Layer | Technology |
 |-------|-----------|
-| Frontend | Next.js 16, Tailwind CSS, Recharts, Web Audio API, MediaPipe |
+| Frontend | Next.js 16, Tailwind CSS, Recharts, @google/genai (Gemini AI), Web Audio API, MediaPipe |
 | Backend | FastAPI, SQLAlchemy (async), WebSockets |
 | Database | PostgreSQL |
 | Reports | ReportLab (PDF), Pandas (CSV) |
@@ -193,22 +211,20 @@ The first 30 seconds work fully offline using the browser-side stress engine (`s
 
 ## i18n
 
-Toggle between English and Hindi using the navbar button. All UI strings are defined in `frontend/app/lib/i18n.ts`.
+NervoScan supports 12 languages natively: English, Hindi, Kannada, Telugu, Tamil, Malayalam, Arabic, Spanish, French, Portuguese, Bengali, and Urdu. 
+
+Toggle between them using the top-right navbar dropdown. All UI strings are managed in `frontend/app/lib/i18n.ts`, with fallback to English for any missing keys.
 
 ---
 
-## Deployment (Railway)
+## Deployment
 
-1. Push to GitHub
-2. Connect repo to Railway
-3. Add a PostgreSQL plugin
-4. Set environment variables:
-   - `DATABASE_URL` — from Railway Postgres
-   - `CORS_ORIGINS` — your frontend domain
-5. Deploy backend service from `/backend`
-6. Deploy frontend service from `/frontend` with `NEXT_PUBLIC_API_URL` pointing to backend
+**For complete deployment instructions, see [DEPLOYMENT.md](DEPLOYMENT.md).**
 
-Estimated cost: **~$5–10/month** on Railway.
+We provide three documented tracks for deployment:
+1. **Docker Compose** (Recommended for robust local/VPS setup)
+2. **Railway** (PaaS cloud deployment, PostgreSQL, ~$5–10/month)
+3. **Manual bare-metal setup**
 
 ---
 

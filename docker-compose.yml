@@ -11,6 +11,12 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   backend:
     build: ./backend
@@ -20,8 +26,17 @@ services:
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/nervoscan
       DATABASE_URL_SYNC: postgresql://postgres:postgres@db:5432/nervoscan
       CORS_ORIGINS: '["http://localhost:3000"]'
+      FRONTEND_URL: http://localhost:3000
+      BACKEND_URL: http://localhost:8000
     depends_on:
-      - db
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   frontend:
     build: ./frontend
@@ -32,6 +47,8 @@ services:
       NEXT_PUBLIC_WS_URL: ws://localhost:8000
     depends_on:
       - backend
+    restart: unless-stopped
 
 volumes:
   pgdata:
+

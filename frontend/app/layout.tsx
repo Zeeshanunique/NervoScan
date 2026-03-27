@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import Navbar from "./components/Navbar";
+import ChatBot from "./components/ChatBot";
 
 export const metadata: Metadata = {
   title: "NervoScan - AI Stress Detection",
@@ -31,6 +32,7 @@ export default function RootLayout({
       <body className="min-h-screen antialiased">
         <Navbar />
         <main className="pt-16">{children}</main>
+        <ChatBot />
       </body>
     </html>
   );

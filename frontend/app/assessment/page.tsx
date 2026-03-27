@@ -13,7 +13,9 @@ import LiveChart from "@/app/components/LiveChart";
 import PitchHeatmap from "@/app/components/PitchHeatmap";
 import CountdownTimer from "@/app/components/CountdownTimer";
 import SpoofBadge from "@/app/components/SpoofBadge";
+import { isTermsAccepted } from "@/app/terms/page";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 type Phase = "idle" | "permission" | "recording" | "processing" | "complete" | "error";
 
@@ -45,6 +47,7 @@ export default function AssessmentPage() {
   const [currentConfidence, setCurrentConfidence] = useState(0);
   const [finalResult, setFinalResult] = useState<FinalResult | null>(null);
   const [error, setError] = useState<string>("");
+  const [isPaused, setIsPaused] = useState(false);
 
   // Refs to avoid stale closures in setInterval/setTimeout callbacks
   const audioRef = useRef<AudioProcessor | null>(null);
@@ -96,7 +99,14 @@ export default function AssessmentPage() {
     return cleanup;
   }, [cleanup]);
 
+  const router = useRouter();
+
   const requestPermissions = async () => {
+    // Check T&C acceptance first
+    if (!isTermsAccepted()) {
+      router.push("/terms");
+      return;
+    }
     setPhase("permission");
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
@@ -347,6 +357,32 @@ export default function AssessmentPage() {
     ];
   };
 
+  const togglePause = useCallback(() => {
+    if (!isPaused) {
+      // Pause: clear timers but keep processors alive
+      if (timerRef.current) clearInterval(timerRef.current);
+      if (updateRef.current) clearInterval(updateRef.current);
+      timerRef.current = null;
+      updateRef.current = null;
+      setIsPaused(true);
+    } else {
+      // Resume: restart timers from where we left off
+      timerRef.current = setInterval(() => {
+        elapsedRef.current += 1;
+        const remaining = TOTAL_DURATION - elapsedRef.current;
+        setSecondsLeft(remaining);
+        if (remaining <= 0 && !finishedRef.current) {
+          finishedRef.current = true;
+          finishRecording();
+        }
+      }, 1000);
+      updateRef.current = setInterval(() => {
+        extractAndUpdate();
+      }, UPDATE_INTERVAL * 1000);
+      setIsPaused(false);
+    }
+  }, [isPaused]);
+
   const resetAssessment = () => {
     cleanup();
     setPhase("idle");
@@ -359,6 +395,7 @@ export default function AssessmentPage() {
     setCurrentConfidence(0);
     setFinalResult(null);
     setError("");
+    setIsPaused(false);
     finishedRef.current = false;
   };
 
@@ -416,8 +453,44 @@ export default function AssessmentPage() {
                   <div className="w-3 h-3 bg-red-500 rounded-full" />
                 </div>
               </div>
-              <span className="text-xs text-red-400 font-medium mt-3 mb-4">{t("assessment.recording", locale)}</span>
+              <span className="text-xs text-red-400 font-medium mt-3 mb-4">
+                {isPaused ? t("assessment.paused", locale) : t("assessment.recording", locale)}
+              </span>
               <CountdownTimer seconds={secondsLeft} total={TOTAL_DURATION} />
+              <div className="mt-4 flex items-center gap-3">
+                <button
+                  onClick={togglePause}
+                  className={`px-5 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-all ${isPaused
+                    ? "bg-green-500/20 text-green-400 border border-green-500/30 hover:bg-green-500/30"
+                    : "bg-amber-500/20 text-amber-400 border border-amber-500/30 hover:bg-amber-500/30"
+                    }`}
+                >
+                  {isPaused ? (
+                    <>
+                      <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M8 5v14l11-7z" />
+                      </svg>
+                      {t("assessment.resume", locale)}
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+                      </svg>
+                      {t("assessment.pause", locale)}
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={finishRecording}
+                  className="px-5 py-2 rounded-lg text-sm font-medium flex items-center gap-2 bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30 transition-all"
+                >
+                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M6 6h12v12H6z" />
+                  </svg>
+                  {t("assessment.stop", locale)}
+                </button>
+              </div>
             </div>
 
             <div className="glass-card p-6 flex flex-col items-center justify-center">

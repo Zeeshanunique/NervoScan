@@ -12,6 +12,8 @@ from app.database import init_db
 from app.api.assessment import router as assessment_router
 from app.api.reports import router as reports_router
 from app.api.auth import router as auth_router
+from app.api.admin import router as admin_router
+from app.api.chatbot import router as chatbot_router
 
 settings = get_settings()
 
@@ -45,6 +47,8 @@ app.add_middleware(
 app.include_router(assessment_router)
 app.include_router(reports_router)
 app.include_router(auth_router)
+app.include_router(admin_router)
+app.include_router(chatbot_router)
 
 
 @app.get("/", tags=["Health"])
