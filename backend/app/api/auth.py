@@ -1,4 +1,4 @@
-"""Google OAuth login and JWT session handling."""
+"""Google OAuth and username/password login with JWT session handling."""
 import logging
 import secrets
 import uuid
@@ -11,6 +11,8 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from fastapi.responses import RedirectResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import jwt
+from passlib.context import CryptContext
+from pydantic import BaseModel, EmailStr
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,10 +23,30 @@ from app.models.assessment import User
 router = APIRouter(prefix="/auth", tags=["Auth"])
 security = HTTPBearer(auto_error=False)
 settings = get_settings()
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo"
+
+
+class RegisterRequest(BaseModel):
+    email: EmailStr
+    password: str
+    name: str | None = None
+
+
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str
+
+
+def hash_password(password: str) -> str:
+    return pwd_context.hash(password)
+
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return pwd_context.verify(plain_password, hashed_password)
 
 
 def build_google_auth_url(state: str) -> str:
@@ -215,4 +237,70 @@ async def auth_me(
         "email": user.email,
         "name": user.name,
         "avatar_url": user.avatar_url,
+    }
+
+
+@router.post("/register")
+async def auth_register(
+    data: RegisterRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(User).where(User.email == data.email))
+    existing_user = result.scalar_one_or_none()
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email already registered"
+        )
+    
+    user = User(
+        anonymous_id=f"local-{uuid.uuid4()}",
+        email=data.email,
+        name=data.name or data.email.split("@")[0],
+        password_hash=hash_password(data.password),
+    )
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+    
+    token = create_token(str(user.id), user.email)
+    return {
+        "token": token,
+        "user": {
+            "user_id": str(user.id),
+            "email": user.email,
+            "name": user.name,
+        }
+    }
+
+
+@router.post("/login")
+async def auth_login(
+    data: LoginRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(User).where(User.email == data.email))
+    user = result.scalar_one_or_none()
+    
+    if not user or not user.password_hash:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email or password"
+        )
+    
+    if not verify_password(data.password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email or password"
+        )
+    
+    token = create_token(str(user.id), user.email)
+    return {
+        "token": token,
+        "user": {
+            "user_id": str(user.id),
+            "email": user.email,
+            "name": user.name,
+            "avatar_url": user.avatar_url,
+        }
     }

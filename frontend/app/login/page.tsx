@@ -18,9 +18,37 @@ const ERROR_MESSAGES: Record<string, string> = {
   access_denied: "Access denied.",
 };
 
+"use client";
+
+import { Suspense, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import Link from "next/link";
+import { getLocale, t, type Locale } from "@/app/lib/i18n";
+import { getStoredToken, setStoredToken } from "@/app/lib/auth";
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+const ERROR_MESSAGES: Record<string, string> = {
+  config: "Login is not configured. Please set up Google OAuth.",
+  no_code: "No authorization code received.",
+  token_exchange: "Failed to exchange code for token.",
+  no_token: "No access token received.",
+  userinfo: "Failed to fetch user profile.",
+  invalid_profile: "Invalid user profile from Google.",
+  access_denied: "Access denied.",
+  invalid_credentials: "Invalid email or password.",
+  email_exists: "Email already registered.",
+};
+
 function LoginContent() {
   const searchParams = useSearchParams();
   const [locale, setLocale] = useState<Locale>("en");
+  const [mode, setMode] = useState<"login" | "register">("login");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [name, setName] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     setLocale(getLocale());
@@ -37,18 +65,61 @@ function LoginContent() {
       window.dispatchEvent(new CustomEvent("nervoscan-auth-change"));
       window.location.replace("/");
     }
+    
+    const errorParam = searchParams.get("error");
+    const detail = searchParams.get("detail");
+    if (errorParam) {
+      const errorMsg = detail
+        ? `${ERROR_MESSAGES[errorParam] || errorParam}: ${decodeURIComponent(detail)}`
+        : (ERROR_MESSAGES[errorParam] || errorParam);
+      setError(errorMsg);
+    }
   }, [searchParams]);
-
-  const error = searchParams.get("error");
-  const detail = searchParams.get("detail");
-  const errorMsg = error
-    ? detail
-      ? `${ERROR_MESSAGES[error] || error}: ${decodeURIComponent(detail)}`
-      : (ERROR_MESSAGES[error] || error)
-    : null;
 
   const handleGoogleLogin = () => {
     window.location.href = `${API_URL}/auth/google`;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
+
+    try {
+      const endpoint = mode === "login" ? "/auth/login" : "/auth/register";
+      const body = mode === "login" 
+        ? { email, password }
+        : { email, password, name };
+
+      const res = await fetch(`${API_URL}${endpoint}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        if (res.status === 400 && data.detail?.includes("already registered")) {
+          setError(ERROR_MESSAGES.email_exists);
+        } else if (res.status === 401) {
+          setError(ERROR_MESSAGES.invalid_credentials);
+        } else {
+          setError(data.detail || "An error occurred");
+        }
+        return;
+      }
+
+      if (data.token) {
+        setStoredToken(data.token);
+        window.dispatchEvent(new CustomEvent("nervoscan-auth-change"));
+        window.location.replace("/");
+      }
+    } catch (err) {
+      setError("Connection failed. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -73,18 +144,87 @@ function LoginContent() {
             </div>
           </Link>
           <h1 className="mt-6 text-2xl font-bold text-white">
-            {t("login.title", locale)}
+            {mode === "login" ? t("login.title", locale) : "Create Account"}
           </h1>
           <p className="mt-2 text-sm text-slate-400">
-            {t("login.subtitle", locale)}
+            {mode === "login" 
+              ? t("login.subtitle", locale)
+              : "Sign up to save your stress reports and track progress"
+            }
           </p>
         </div>
 
-        {errorMsg && (
+        {error && (
           <div className="mb-6 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
-            {errorMsg}
+            {error}
           </div>
         )}
+
+        <form onSubmit={handleSubmit} className="space-y-4 mb-6">
+          {mode === "register" && (
+            <div>
+              <label htmlFor="name" className="block text-sm font-medium text-slate-300 mb-2">
+                Name (optional)
+              </label>
+              <input
+                id="name"
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Your name"
+                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500/50 transition-colors"
+              />
+            </div>
+          )}
+          
+          <div>
+            <label htmlFor="email" className="block text-sm font-medium text-slate-300 mb-2">
+              Email
+            </label>
+            <input
+              id="email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              required
+              className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500/50 transition-colors"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="password" className="block text-sm font-medium text-slate-300 mb-2">
+              Password
+            </label>
+            <input
+              id="password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+              required
+              minLength={6}
+              className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500/50 transition-colors"
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full px-6 py-4 bg-indigo-600 hover:bg-indigo-500 disabled:bg-indigo-600/50 disabled:cursor-not-allowed rounded-xl text-white font-medium transition-all"
+          >
+            {loading ? "Processing..." : mode === "login" ? "Sign in" : "Create Account"}
+          </button>
+        </form>
+
+        <div className="relative mb-6">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-white/10"></div>
+          </div>
+          <div className="relative flex justify-center text-sm">
+            <span className="px-4 bg-slate-950 text-slate-400">or continue with</span>
+          </div>
+        </div>
 
         <button
           onClick={handleGoogleLogin}
@@ -110,6 +250,21 @@ function LoginContent() {
           </svg>
           {t("login.googleSignIn", locale)}
         </button>
+
+        <div className="mt-6 text-center">
+          <button
+            onClick={() => {
+              setMode(mode === "login" ? "register" : "login");
+              setError(null);
+            }}
+            className="text-sm text-slate-400 hover:text-white transition-colors"
+          >
+            {mode === "login" 
+              ? "Don't have an account? Sign up" 
+              : "Already have an account? Sign in"
+            }
+          </button>
+        </div>
 
         <p className="mt-8 text-center text-xs text-slate-500">
           {t("login.privacyNote", locale)}

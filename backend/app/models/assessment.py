@@ -27,9 +27,10 @@ class User(Base):
     id = Column(GUID, primary_key=True, default=uuid.uuid4)
     anonymous_id = Column(String(128), unique=True, nullable=False, index=True)
     google_id = Column(String(128), unique=True, nullable=True, index=True)
-    email = Column(String(255), nullable=True)
+    email = Column(String(255), nullable=True, index=True)
     name = Column(String(255), nullable=True)
     avatar_url = Column(String(512), nullable=True)
+    password_hash = Column(String(255), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     locale = Column(String(10), default="en")
 
