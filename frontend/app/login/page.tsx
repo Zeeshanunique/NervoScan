@@ -6,6 +6,9 @@ import Link from "next/link";
 import { getLocale, t, type Locale } from "@/app/lib/i18n";
 import { getStoredToken, setStoredToken } from "@/app/lib/auth";
 
+// Force dynamic rendering for this page
+export const dynamic = 'force-dynamic';
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 const ERROR_MESSAGES: Record<string, string> = {
