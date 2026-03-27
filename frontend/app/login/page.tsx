@@ -1,13 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { getLocale, t, type Locale } from "@/app/lib/i18n";
 import { getStoredToken, setStoredToken } from "@/app/lib/auth";
-
-// Force dynamic rendering for this page
-export const dynamic = 'force-dynamic';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -21,7 +18,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   access_denied: "Access denied.",
 };
 
-export default function LoginPage() {
+function LoginContent() {
   const searchParams = useSearchParams();
   const [locale, setLocale] = useState<Locale>("en");
 
@@ -128,5 +125,17 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center">
+        <div className="text-white">Loading...</div>
+      </div>
+    }>
+      <LoginContent />
+    </Suspense>
   );
 }
