@@ -7,7 +7,7 @@ GET /admin/assessments — Paginated list of all assessments
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException, status
 from sqlalchemy import select, func, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,8 +17,22 @@ from app.models.assessment import User, Assessment
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
 
+async def require_admin(db: AsyncSession = Depends(get_db)) -> User:
+    from app.api.auth import get_current_user
+    user = await get_current_user(db=db)
+    if not user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required"
+        )
+    return user
+
+
 @router.get("/stats")
-async def admin_stats(db: AsyncSession = Depends(get_db)):
+async def admin_stats(
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
     """Dashboard summary: total users, assessments, avg stress, level distribution."""
 
     # Total users
@@ -120,6 +134,7 @@ async def admin_users(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
 ):
     """List all users with their assessment count."""
     rows = (
@@ -160,6 +175,7 @@ async def admin_assessments(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
 ):
     """Paginated list of all assessments."""
     rows = (

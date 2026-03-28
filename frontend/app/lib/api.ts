@@ -1,10 +1,15 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8000";
 
-export async function startAssessment(anonymousId: string, locale: string = "en") {
+export async function startAssessment(anonymousId: string, locale: string = "en", token?: string) {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+  
   const res = await fetch(`${API_URL}/assessment/start`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify({ anonymous_id: anonymousId, locale }),
   });
   if (!res.ok) throw new Error("Failed to start assessment");
@@ -31,8 +36,15 @@ export function createLiveSocket(): WebSocket {
   return new WebSocket(`${WS_URL}/assessment/live`);
 }
 
-export async function getReports(userId: string, days: number = 30) {
-  const res = await fetch(`${API_URL}/reports/${userId}?days=${days}`);
+export async function getReports(userId: string, days: number = 30, token?: string) {
+  const headers: Record<string, string> = {};
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+  
+  const res = await fetch(`${API_URL}/reports/${userId}?days=${days}`, {
+    headers,
+  });
   if (!res.ok) throw new Error("Failed to get reports");
   return res.json();
 }

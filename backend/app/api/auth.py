@@ -42,11 +42,13 @@ class LoginRequest(BaseModel):
 
 
 def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
+    password_bytes = password.encode('utf-8')[:72]
+    return pwd_context.hash(password_bytes.decode('utf-8'))
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
+    password_bytes = plain_password.encode('utf-8')[:72]
+    return pwd_context.verify(password_bytes.decode('utf-8'), hashed_password)
 
 
 def build_google_auth_url(state: str) -> str:
@@ -62,10 +64,11 @@ def build_google_auth_url(state: str) -> str:
     return f"{GOOGLE_AUTH_URL}?{urlencode(params)}"
 
 
-def create_token(user_id: str, email: str | None = None) -> str:
+def create_token(user_id: str, email: str | None = None, is_admin: bool = False) -> str:
     payload = {
         "sub": user_id,
         "email": email or "",
+        "is_admin": is_admin,
         "exp": datetime.utcnow() + timedelta(minutes=settings.jwt_expire_minutes),
         "iat": datetime.utcnow(),
     }
@@ -80,13 +83,16 @@ def decode_token(token: str) -> dict | None:
 
 
 @router.get("/google")
-async def auth_google_redirect():
+async def auth_google_redirect(redirect: str | None = Query(None)):
     if not settings.google_client_id or not settings.google_client_secret:
+        redirect_param = f"&redirect={quote(redirect)}" if redirect else ""
         return RedirectResponse(
-            url=f"{settings.frontend_url}/login?error=config",
+            url=f"{settings.frontend_url}/login?error=config{redirect_param}",
             status_code=status.HTTP_302_FOUND,
         )
     state = secrets.token_urlsafe(32)
+    if redirect:
+        state = f"{state}:{redirect}"
     url = build_google_auth_url(state)
     return RedirectResponse(url=url, status_code=status.HTTP_302_FOUND)
 
@@ -98,14 +104,21 @@ async def auth_google_callback(
     error: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
 ):
+    redirect_path = "/"
+    if state and ":" in state:
+        parts = state.split(":", 1)
+        redirect_path = parts[1]
+    
+    redirect_param = f"&redirect={quote(redirect_path)}" if redirect_path != "/" else ""
+    
     if error:
         return RedirectResponse(
-            url=f"{settings.frontend_url}/login?error={error}",
+            url=f"{settings.frontend_url}/login?error={error}{redirect_param}",
             status_code=status.HTTP_302_FOUND,
         )
     if not code:
         return RedirectResponse(
-            url=f"{settings.frontend_url}/login?error=no_code",
+            url=f"{settings.frontend_url}/login?error=no_code{redirect_param}",
             status_code=status.HTTP_302_FOUND,
         )
 
@@ -135,14 +148,14 @@ async def auth_google_callback(
             except Exception:
                 err_msg = "token_exchange"
             return RedirectResponse(
-                url=f"{settings.frontend_url}/login?error=token_exchange&detail={quote(str(err_msg))}",
+                url=f"{settings.frontend_url}/login?error=token_exchange&detail={quote(str(err_msg))}{redirect_param}",
                 status_code=status.HTTP_302_FOUND,
             )
         tokens = token_res.json()
         access_token = tokens.get("access_token")
         if not access_token:
             return RedirectResponse(
-                url=f"{settings.frontend_url}/login?error=no_token",
+                url=f"{settings.frontend_url}/login?error=no_token{redirect_param}",
                 status_code=status.HTTP_302_FOUND,
             )
 
@@ -152,7 +165,7 @@ async def auth_google_callback(
         )
         if userinfo_res.status_code != 200:
             return RedirectResponse(
-                url=f"{settings.frontend_url}/login?error=userinfo",
+                url=f"{settings.frontend_url}/login?error=userinfo{redirect_param}",
                 status_code=status.HTTP_302_FOUND,
             )
         info = userinfo_res.json()
@@ -163,7 +176,7 @@ async def auth_google_callback(
     picture = info.get("picture")
     if not google_id:
         return RedirectResponse(
-            url=f"{settings.frontend_url}/login?error=invalid_profile",
+            url=f"{settings.frontend_url}/login?error=invalid_profile{redirect_param}",
             status_code=status.HTTP_302_FOUND,
         )
 
@@ -197,9 +210,14 @@ async def auth_google_callback(
         user.avatar_url = picture
 
     await db.commit()
-    token = create_token(str(user.id), user.email)
+    token = create_token(str(user.id), user.email, user.is_admin)
+    
+    redirect_url = f"{settings.frontend_url}/login?token={token}&success=1"
+    if redirect_path and redirect_path != "/":
+        redirect_url += f"&redirect={quote(redirect_path)}"
+    
     return RedirectResponse(
-        url=f"{settings.frontend_url}/login?token={token}&success=1",
+        url=redirect_url,
         status_code=status.HTTP_302_FOUND,
     )
 
@@ -215,11 +233,10 @@ def get_token_from_request(
     raise HTTPException(status_code=401, detail="Missing token")
 
 
-@router.get("/me")
-async def auth_me(
+async def get_current_user(
     token: str = Depends(get_token_from_request),
     db: AsyncSession = Depends(get_db),
-):
+) -> User:
     payload = decode_token(token)
     if not payload:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
@@ -232,11 +249,26 @@ async def auth_me(
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    return user
+
+
+async def require_admin(user: User = Depends(get_current_user)) -> User:
+    if not user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required"
+        )
+    return user
+
+
+@router.get("/me")
+async def auth_me(user: User = Depends(get_current_user)):
     return {
         "user_id": str(user.id),
         "email": user.email,
         "name": user.name,
         "avatar_url": user.avatar_url,
+        "is_admin": user.is_admin,
     }
 
 
@@ -263,7 +295,7 @@ async def auth_register(
     await db.commit()
     await db.refresh(user)
     
-    token = create_token(str(user.id), user.email)
+    token = create_token(str(user.id), user.email, user.is_admin)
     return {
         "token": token,
         "user": {
@@ -294,7 +326,7 @@ async def auth_login(
             detail="Invalid email or password"
         )
     
-    token = create_token(str(user.id), user.email)
+    token = create_token(str(user.id), user.email, user.is_admin)
     return {
         "token": token,
         "user": {
@@ -302,5 +334,6 @@ async def auth_login(
             "email": user.email,
             "name": user.name,
             "avatar_url": user.avatar_url,
+            "is_admin": user.is_admin,
         }
     }

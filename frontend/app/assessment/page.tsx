@@ -36,6 +36,7 @@ const TOTAL_DURATION = 60;
 const UPDATE_INTERVAL = 5;
 
 export default function AssessmentPage() {
+  const router = useRouter();
   const [locale, setLoc] = useState<Locale>("en");
   const [phase, setPhase] = useState<Phase>("idle");
   const [secondsLeft, setSecondsLeft] = useState(TOTAL_DURATION);
@@ -70,15 +71,21 @@ export default function AssessmentPage() {
 
   useEffect(() => {
     setLoc(getLocale());
-    let anonId = localStorage.getItem("nervoscan-anon-id");
-    if (!anonId) {
-      anonId = "anon-" + Math.random().toString(36).substring(2, 15);
-      localStorage.setItem("nervoscan-anon-id", anonId);
-    }
     const handler = () => setLoc(getLocale());
     window.addEventListener("nervoscan-locale-change", handler);
     return () => window.removeEventListener("nervoscan-locale-change", handler);
   }, []);
+
+  useEffect(() => {
+    const { getStoredToken, setStoredToken } = require("@/app/lib/auth");
+    const token = getStoredToken();
+    if (!token) {
+      router.replace("/login?redirect=/assessment");
+    } else {
+      // Ensure cookie is set for middleware (in case user logged in before cookie implementation)
+      setStoredToken(token);
+    }
+  }, [router]);
 
   const cleanup = useCallback(() => {
     if (timerRef.current) clearInterval(timerRef.current);
@@ -99,10 +106,14 @@ export default function AssessmentPage() {
     return cleanup;
   }, [cleanup]);
 
-  const router = useRouter();
-
   const requestPermissions = async () => {
-    // Check T&C acceptance first
+    const { getStoredToken } = require("@/app/lib/auth");
+    const token = getStoredToken();
+    if (!token) {
+      router.replace("/login?redirect=/assessment");
+      return;
+    }
+
     if (!isTermsAccepted()) {
       router.push("/terms");
       return;
@@ -156,21 +167,38 @@ export default function AssessmentPage() {
       keystrokes.start();
       keystrokeRef.current = keystrokes;
 
-      // Try to connect to backend
+      // Connect to backend (requires auth)
       try {
-        const anonId = localStorage.getItem("nervoscan-anon-id") || "anonymous";
-        const session = await startAssessment(anonId, locale);
+        const { getStoredToken } = await import("@/app/lib/auth");
+        const token = getStoredToken();
+        
+        if (!token) {
+          router.replace("/login?redirect=/assessment");
+          return;
+        }
+        
+        let anonId = localStorage.getItem("nervoscan-anon-id");
+        if (!anonId) {
+          anonId = "anon-" + Math.random().toString(36).substring(2, 15);
+          localStorage.setItem("nervoscan-anon-id", anonId);
+        }
+        
+        const session = await startAssessment(anonId, locale, token);
         assessmentIdRef.current = session.assessment_id;
         userIdRef.current = session.user_id;
 
-        // Persist user_id so reports page can fetch history
         localStorage.setItem("nervoscan-user-id", session.user_id);
 
-        // WebSocket for live updates
         const ws = createLiveSocket();
         wsRef.current = ws;
-      } catch {
-        console.log("Running in offline mode");
+      } catch (err: any) {
+        if (err.message?.includes("401") || err.message?.includes("Authentication")) {
+          router.replace("/login?redirect=/assessment");
+          return;
+        }
+        console.log("Failed to connect to backend:", err);
+        setError("Failed to start assessment. Please try again.");
+        setPhase("error");
       }
 
       // Countdown timer (1s tick)

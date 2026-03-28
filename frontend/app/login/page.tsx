@@ -16,26 +16,6 @@ const ERROR_MESSAGES: Record<string, string> = {
   userinfo: "Failed to fetch user profile.",
   invalid_profile: "Invalid user profile from Google.",
   access_denied: "Access denied.",
-};
-
-"use client";
-
-import { Suspense, useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
-import Link from "next/link";
-import { getLocale, t, type Locale } from "@/app/lib/i18n";
-import { getStoredToken, setStoredToken } from "@/app/lib/auth";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-
-const ERROR_MESSAGES: Record<string, string> = {
-  config: "Login is not configured. Please set up Google OAuth.",
-  no_code: "No authorization code received.",
-  token_exchange: "Failed to exchange code for token.",
-  no_token: "No access token received.",
-  userinfo: "Failed to fetch user profile.",
-  invalid_profile: "Invalid user profile from Google.",
-  access_denied: "Access denied.",
   invalid_credentials: "Invalid email or password.",
   email_exists: "Email already registered.",
 };
@@ -60,10 +40,12 @@ function LoginContent() {
   useEffect(() => {
     const token = searchParams.get("token");
     const success = searchParams.get("success");
+    const redirect = searchParams.get("redirect");
+    
     if (token && success === "1") {
       setStoredToken(token);
       window.dispatchEvent(new CustomEvent("nervoscan-auth-change"));
-      window.location.replace("/");
+      window.location.replace(redirect || "/");
     }
     
     const errorParam = searchParams.get("error");
@@ -77,7 +59,9 @@ function LoginContent() {
   }, [searchParams]);
 
   const handleGoogleLogin = () => {
-    window.location.href = `${API_URL}/auth/google`;
+    const redirect = searchParams.get("redirect");
+    const redirectParam = redirect ? `?redirect=${encodeURIComponent(redirect)}` : "";
+    window.location.href = `${API_URL}/auth/google${redirectParam}`;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -113,7 +97,8 @@ function LoginContent() {
       if (data.token) {
         setStoredToken(data.token);
         window.dispatchEvent(new CustomEvent("nervoscan-auth-change"));
-        window.location.replace("/");
+        const redirect = searchParams.get("redirect");
+        window.location.replace(redirect || "/");
       }
     } catch (err) {
       setError("Connection failed. Please try again.");

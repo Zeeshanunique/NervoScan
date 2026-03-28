@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { getLocale, t, type Locale } from "@/app/lib/i18n";
 import { getStoredToken } from "@/app/lib/auth";
 
@@ -38,6 +39,7 @@ const LEVEL_COLORS: Record<string, string> = {
 };
 
 export default function AdminPage() {
+    const router = useRouter();
     const [locale, setLoc] = useState<Locale>("en");
     const [stats, setStats] = useState<AdminStats | null>(null);
     const [loading, setLoading] = useState(true);
@@ -51,14 +53,43 @@ export default function AdminPage() {
     }, []);
 
     useEffect(() => {
+        const token = getStoredToken();
+        if (!token) {
+            router.replace("/login?redirect=/admin");
+            return;
+        }
+        // Ensure cookie is set for middleware (in case user logged in before cookie implementation)
+        const { setStoredToken } = require("@/app/lib/auth");
+        setStoredToken(token);
+        
         fetchStats();
-    }, []);
+    }, [router]);
 
     const fetchStats = async () => {
         try {
             setLoading(true);
-            const res = await fetch(`${API_URL}/admin/stats`);
+            const token = getStoredToken();
+            if (!token) {
+                router.replace("/login?redirect=/admin");
+                return;
+            }
+
+            const res = await fetch(`${API_URL}/admin/stats`, {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            });
+
+            if (res.status === 401) {
+                router.replace("/login?redirect=/admin");
+                return;
+            }
+            if (res.status === 403) {
+                router.replace("/?error=unauthorized");
+                return;
+            }
             if (!res.ok) throw new Error("Failed to fetch admin stats");
+
             const data = await res.json();
             setStats(data);
         } catch (err: any) {
@@ -108,15 +139,26 @@ export default function AdminPage() {
                     <h1 className="text-2xl font-bold text-slate-100">{t("admin.title", locale)}</h1>
                     <p className="text-sm text-slate-400 mt-1">{t("admin.subtitle", locale)}</p>
                 </div>
-                <button
-                    onClick={fetchStats}
-                    className="px-4 py-2 bg-slate-800 text-slate-300 rounded-lg hover:bg-slate-700 transition-colors border border-slate-700 flex items-center gap-2 text-sm"
-                >
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
-                    Refresh
-                </button>
+                <div className="flex items-center gap-3">
+                    <button
+                        onClick={fetchStats}
+                        className="px-4 py-2 bg-slate-800 text-slate-300 rounded-lg hover:bg-slate-700 transition-colors border border-slate-700 flex items-center gap-2 text-sm"
+                    >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        Refresh
+                    </button>
+                    <button
+                        onClick={() => router.push("/")}
+                        className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-500 transition-colors flex items-center gap-2 text-sm"
+                    >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                        </svg>
+                        Back to App
+                    </button>
+                </div>
             </div>
 
             {/* Stats Cards */}

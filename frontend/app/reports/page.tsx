@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import {
   LineChart,
   Line,
@@ -16,6 +17,7 @@ import {
 } from "recharts";
 import { getLocale, t, type Locale } from "@/app/lib/i18n";
 import { getReports, getExportPdfUrl, getExportCsvUrl } from "@/app/lib/api";
+import { getStoredToken } from "@/app/lib/auth";
 import StressLevel from "@/app/components/StressLevel";
 
 interface Assessment {
@@ -38,6 +40,7 @@ interface TrendData {
 type TimeRange = "daily" | "weekly" | "monthly";
 
 export default function ReportsPage() {
+  const router = useRouter();
   const [locale, setLoc] = useState<Locale>("en");
   const [assessments, setAssessments] = useState<Assessment[]>([]);
   const [trend, setTrend] = useState<TrendData | null>(null);
@@ -47,27 +50,69 @@ export default function ReportsPage() {
 
   useEffect(() => {
     setLoc(getLocale());
-    loadReports();
     const handler = () => setLoc(getLocale());
     window.addEventListener("nervoscan-locale-change", handler);
     return () => window.removeEventListener("nervoscan-locale-change", handler);
   }, []);
 
-  const loadReports = async () => {
-    setLoading(true);
-    const storedUserId = localStorage.getItem("nervoscan-user-id");
-
-    if (storedUserId) {
-      setUserId(storedUserId);
+  useEffect(() => {
+    const token = getStoredToken();
+    if (!token) {
+      router.replace("/login?redirect=/reports");
+      return;
+    }
+    
+    // Ensure cookie is set for middleware (in case user logged in before cookie implementation)
+    const { setStoredToken } = require("@/app/lib/auth");
+    setStoredToken(token);
+    
+    const fetchUserAndLoadReports = async () => {
       try {
-        const days = timeRange === "daily" ? 7 : timeRange === "weekly" ? 30 : 90;
-        const data = await getReports(storedUserId, days);
-        setAssessments(data.assessments || []);
-        setTrend(data.trend || null);
-      } catch {
-        setAssessments([]);
-        setTrend(null);
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+        const res = await fetch(`${API_URL}/auth/me`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        
+        if (!res.ok) {
+          router.replace("/login?redirect=/reports");
+          return;
+        }
+        
+        const userData = await res.json();
+        setUserId(userData.user_id);
+        localStorage.setItem("nervoscan-user-id", userData.user_id);
+        
+        loadReports(userData.user_id, token);
+      } catch (err) {
+        router.replace("/login?redirect=/reports");
       }
+    };
+    
+    fetchUserAndLoadReports();
+  }, [router, timeRange]);
+
+  const loadReports = async (userIdToUse?: string, tokenToUse?: string) => {
+    setLoading(true);
+    const token = tokenToUse || getStoredToken();
+    const uid = userIdToUse || userId;
+    
+    if (!token || !uid) {
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const days = timeRange === "daily" ? 7 : timeRange === "weekly" ? 30 : 90;
+      const data = await getReports(uid, days, token);
+      setAssessments(data.assessments || []);
+      setTrend(data.trend || null);
+    } catch (err) {
+      if ((err as any)?.message?.includes("401")) {
+        router.replace("/login?redirect=/reports");
+        return;
+      }
+      setAssessments([]);
+      setTrend(null);
     }
 
     setLoading(false);
@@ -209,7 +254,11 @@ export default function ReportsPage() {
             <button
               onClick={() => {
                 if (assessments.length > 0) {
-                  window.open(getExportPdfUrl(assessments[0].id), "_blank");
+                  const token = getStoredToken();
+                  const url = new URL(getExportPdfUrl(assessments[0].id));
+                  if (token) {
+                    window.open(`${url.href}&token=${token}`, "_blank");
+                  }
                 }
               }}
               className="px-6 py-3 bg-slate-800 text-slate-200 font-medium rounded-xl hover:bg-slate-700 transition-colors border border-slate-700 flex items-center gap-2"
@@ -223,7 +272,11 @@ export default function ReportsPage() {
             <button
               onClick={() => {
                 if (userId) {
-                  window.open(getExportCsvUrl(userId), "_blank");
+                  const token = getStoredToken();
+                  const url = new URL(getExportCsvUrl(userId));
+                  if (token) {
+                    window.open(`${url.href}&token=${token}`, "_blank");
+                  }
                 }
               }}
               className="px-6 py-3 bg-slate-800 text-slate-200 font-medium rounded-xl hover:bg-slate-700 transition-colors border border-slate-700 flex items-center gap-2"

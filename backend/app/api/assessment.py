@@ -11,7 +11,7 @@ import numpy as np
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, HTTPException
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, HTTPException, Header
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel
@@ -61,19 +61,29 @@ class FinalResponse(BaseModel):
 # --- Endpoints ---
 
 @router.post("/start", response_model=StartResponse)
-async def start_assessment(req: StartRequest, db: AsyncSession = Depends(get_db)):
-    """Start a new 60-second assessment session."""
-
-    # Get or create user
-    result = await db.execute(select(User).where(User.anonymous_id == req.anonymous_id))
+async def start_assessment(
+    req: StartRequest, 
+    db: AsyncSession = Depends(get_db),
+    authorization: str | None = Header(None)
+):
+    """Start a new 60-second assessment session. Requires authentication."""
+    from app.api.auth import decode_token
+    
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Authentication required to start assessment")
+    
+    token = authorization.replace("Bearer ", "")
+    payload = decode_token(token)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+    
+    user_id = payload.get("sub")
+    result = await db.execute(select(User).where(User.id == uuid.UUID(user_id)))
     user = result.scalar_one_or_none()
-
+    
     if not user:
-        user = User(anonymous_id=req.anonymous_id, locale=req.locale)
-        db.add(user)
-        await db.flush()
+        raise HTTPException(status_code=404, detail="User not found")
 
-    # Create assessment
     assessment = Assessment(
         user_id=user.id,
         status="recording",

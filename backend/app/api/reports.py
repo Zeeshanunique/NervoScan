@@ -8,7 +8,7 @@ import uuid
 from datetime import datetime, timedelta
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Header
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
@@ -56,10 +56,23 @@ async def get_reports(
     days: int = Query(30, ge=1, le=365),
     limit: int = Query(50, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
+    authorization: str | None = Header(None)
 ):
-    """Get assessment history and trends for a user."""
+    """Get assessment history and trends for a user. Requires authentication."""
+    from app.api.auth import decode_token
+    
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Authentication required to view reports")
+    
+    token = authorization.replace("Bearer ", "")
+    payload = decode_token(token)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+    
+    authenticated_user_id = payload.get("sub")
+    if authenticated_user_id != user_id:
+        raise HTTPException(status_code=403, detail="Cannot view other users' reports")
 
-    # Validate user
     result = await db.execute(
         select(User).where(User.id == uuid.UUID(user_id))
     )
@@ -67,7 +80,6 @@ async def get_reports(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # Get assessments
     since = datetime.utcnow() - timedelta(days=days)
     result = await db.execute(
         select(Assessment)
@@ -93,7 +105,6 @@ async def get_reports(
         for a in assessments
     ]
 
-    # Compute trend
     trend = None
     if assessments:
         trend = {
@@ -113,9 +124,21 @@ async def get_reports(
 @router.get("/export/pdf")
 async def export_pdf(
     assessment_id: str = Query(...),
+    token: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
+    authorization: str | None = Header(None)
 ):
-    """Export a single assessment as PDF."""
+    """Export a single assessment as PDF. Requires authentication."""
+    from app.api.auth import decode_token
+    
+    auth_token = token or (authorization.replace("Bearer ", "") if authorization and authorization.startswith("Bearer ") else None)
+    
+    if not auth_token:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    payload = decode_token(auth_token)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
 
     result = await db.execute(
         select(Assessment).where(Assessment.id == uuid.UUID(assessment_id))
@@ -123,6 +146,10 @@ async def export_pdf(
     assessment = result.scalar_one_or_none()
     if not assessment:
         raise HTTPException(status_code=404, detail="Assessment not found")
+    
+    authenticated_user_id = payload.get("sub")
+    if str(assessment.user_id) != authenticated_user_id:
+        raise HTTPException(status_code=403, detail="Cannot export other users' assessments")
 
     assessment_dict = {
         "stress_score": assessment.stress_score,
@@ -154,9 +181,25 @@ async def export_pdf(
 async def export_csv(
     user_id: str = Query(...),
     days: int = Query(30, ge=1, le=365),
+    token: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
+    authorization: str | None = Header(None)
 ):
-    """Export assessment history as CSV."""
+    """Export assessment history as CSV. Requires authentication."""
+    from app.api.auth import decode_token
+    
+    auth_token = token or (authorization.replace("Bearer ", "") if authorization and authorization.startswith("Bearer ") else None)
+    
+    if not auth_token:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    payload = decode_token(auth_token)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+    
+    authenticated_user_id = payload.get("sub")
+    if authenticated_user_id != user_id:
+        raise HTTPException(status_code=403, detail="Cannot export other users' data")
 
     since = datetime.utcnow() - timedelta(days=days)
     result = await db.execute(
