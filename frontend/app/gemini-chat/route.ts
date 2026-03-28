@@ -7,6 +7,8 @@ Your role:
 - Help users manage stress through practical, evidence-based advice
 - Provide breathing exercises, meditation guidance, sleep tips, and grounding techniques
 - Answer questions about the NervoScan app and how it works
+- Provide HIGHLY PERSONALIZED insights based on the user's assessment history, patterns, and trends
+- Celebrate improvements and acknowledge challenges with empathy
 - Be warm, supportive, and non-judgmental
 - Keep responses concise (2-4 paragraphs max) and use emoji sparingly
 - If someone appears in crisis, gently recommend professional help
@@ -17,7 +19,16 @@ NervoScan context:
 - The ML model (SVM) has ~79.7% accuracy on the RAVDESS dataset
 - All biometric data is processed locally in the browser (offline-first)
 - No audio/video recordings are stored on the server
-- Stress levels: Low, Moderate, High, Critical
+- Stress levels: Low (0-30), Moderate (30-50), High (50-70), Critical (70-100)
+
+When provided with user data:
+- Reference specific numbers and patterns naturally in conversation
+- Acknowledge trends (improving/stable/worsening) and provide relevant guidance
+- Celebrate consistency and progress
+- Gently encourage better habits if usage is low
+- Connect stress patterns to actionable wellness advice
+- If recommendations were given before, ask about their effectiveness
+- Be specific: "Your stress has improved from 65 to 45 over the last 3 assessments" instead of generic advice
 
 If asked about admin features, explain that admins can view user statistics, assessment history, stress distribution, and model accuracy on the admin dashboard.
 
@@ -33,9 +44,89 @@ export async function POST(req: NextRequest) {
             );
         }
 
-        const { message, history } = await req.json();
+        const { message, history, token } = await req.json();
         if (!message || typeof message !== "string") {
             return NextResponse.json({ reply: "Please provide a message.", suggestions: [] }, { status: 400 });
+        }
+
+        // Fetch user data if token is provided
+        let userContext = "";
+        if (token) {
+            try {
+                const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+                const userDataRes = await fetch(`${API_URL}/chatbot/user-context`, {
+                    headers: { Authorization: `Bearer ${token}` },
+                });
+                
+                if (userDataRes.ok) {
+                    const userData = await userDataRes.json();
+                    
+                    // Build comprehensive context
+                    const contextParts = ["\n\n=== USER'S PERSONALIZED DATA ==="];
+                    
+                    // User info
+                    if (userData.user_name) {
+                        contextParts.push(`User Name: ${userData.user_name}`);
+                    }
+                    if (userData.member_since) {
+                        contextParts.push(`Member Since: ${userData.member_since} (${userData.days_active} days)`);
+                    }
+                    
+                    // Assessment statistics
+                    contextParts.push(`\n📊 Assessment History:`);
+                    contextParts.push(`- Total assessments: ${userData.total_assessments}`);
+                    contextParts.push(`- Completed: ${userData.completed_assessments}`);
+                    contextParts.push(`- Average stress score: ${userData.avg_stress || 'N/A'}/100`);
+                    
+                    // Usage patterns
+                    contextParts.push(`\n📅 Usage Patterns:`);
+                    contextParts.push(`- Last 7 days: ${userData.assessments_last_week} assessments`);
+                    contextParts.push(`- Last 30 days: ${userData.assessments_last_month} assessments`);
+                    contextParts.push(`- Frequency: ${userData.frequency_per_week} assessments/week`);
+                    contextParts.push(`- Consistency: ${userData.consistency}`);
+                    
+                    // Stress patterns
+                    if (userData.level_distribution && Object.keys(userData.level_distribution).length > 0) {
+                        contextParts.push(`\n🎯 Stress Level Distribution:`);
+                        for (const [level, count] of Object.entries(userData.level_distribution)) {
+                            contextParts.push(`- ${level}: ${count} times`);
+                        }
+                    }
+                    
+                    // Trend analysis
+                    if (userData.trend) {
+                        const trendEmoji = userData.trend === "improving" ? "📈" : userData.trend === "worsening" ? "📉" : "➡️";
+                        contextParts.push(`\n${trendEmoji} Stress Trend: ${userData.trend}`);
+                    }
+                    
+                    // Latest assessment
+                    if (userData.latest_assessment && userData.latest_assessment.stress_score) {
+                        contextParts.push(`\n🔍 Latest Assessment:`);
+                        contextParts.push(`- Score: ${userData.latest_assessment.stress_score}/100`);
+                        contextParts.push(`- Level: ${userData.latest_assessment.stress_level}`);
+                        contextParts.push(`- Confidence: ${userData.latest_assessment.confidence}%`);
+                        
+                        if (userData.latest_assessment.recommendations && userData.latest_assessment.recommendations.length > 0) {
+                            contextParts.push(`- Previous recommendations: ${userData.latest_assessment.recommendations.join(", ")}`);
+                        }
+                    }
+                    
+                    // Quality indicators
+                    contextParts.push(`\n✅ Data Quality:`);
+                    contextParts.push(`- Average confidence: ${userData.avg_confidence || 'N/A'}%`);
+                    if (userData.spoof_detections > 0) {
+                        contextParts.push(`- ⚠️ Spoof detections: ${userData.spoof_detections}`);
+                    }
+                    
+                    contextParts.push(`\n=== END USER DATA ===`);
+                    contextParts.push(`\nUse this data to provide HIGHLY PERSONALIZED insights. Reference specific numbers, trends, and patterns when relevant. Acknowledge improvements or concerns. Be supportive and specific.`);
+                    
+                    userContext = contextParts.join("\n");
+                }
+            } catch (error) {
+                // Continue without user data if fetch fails
+                console.error("Failed to fetch user context:", error);
+            }
         }
 
         const ai = new GoogleGenAI({ apiKey });
@@ -57,8 +148,9 @@ export async function POST(req: NextRequest) {
             }
         }
 
-        // Add current message
-        contents.push({ role: "user", parts: [{ text: message }] });
+        // Add current message with user context
+        const messageWithContext = userContext ? `${message}${userContext}` : message;
+        contents.push({ role: "user", parts: [{ text: messageWithContext }] });
 
         const response = await ai.models.generateContent({
             model: "gemini-2.5-flash",

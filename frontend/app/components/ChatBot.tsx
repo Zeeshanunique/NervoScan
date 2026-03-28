@@ -63,6 +63,9 @@ export default function ChatBot() {
         setLoading(true);
 
         try {
+            const { getStoredToken } = require("@/app/lib/auth");
+            const token = getStoredToken();
+
             // Build history from previous messages (excluding suggestions)
             const history = messages
                 .filter((m) => m.role === "user" || m.role === "bot")
@@ -71,7 +74,11 @@ export default function ChatBot() {
             const res = await fetch("/gemini-chat", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ message: text.trim(), history }),
+                body: JSON.stringify({ 
+                    message: text.trim(), 
+                    history,
+                    token: token || null  // Pass token to enable personalized context
+                }),
             });
 
             if (!res.ok) throw new Error("Failed");
