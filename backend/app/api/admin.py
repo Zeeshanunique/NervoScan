@@ -13,19 +13,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models.assessment import User, Assessment
+from app.api.auth import require_admin
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
-
-
-async def require_admin(db: AsyncSession = Depends(get_db)) -> User:
-    from app.api.auth import get_current_user
-    user = await get_current_user(db=db)
-    if not user.is_admin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin access required"
-        )
-    return user
 
 
 @router.get("/stats")

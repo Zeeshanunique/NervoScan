@@ -62,10 +62,6 @@ export default function ReportsPage() {
       return;
     }
     
-    // Ensure cookie is set for middleware (in case user logged in before cookie implementation)
-    const { setStoredToken } = require("@/app/lib/auth");
-    setStoredToken(token);
-    
     const fetchUserAndLoadReports = async () => {
       try {
         const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";

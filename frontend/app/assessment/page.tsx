@@ -77,13 +77,9 @@ export default function AssessmentPage() {
   }, []);
 
   useEffect(() => {
-    const { getStoredToken, setStoredToken } = require("@/app/lib/auth");
     const token = getStoredToken();
     if (!token) {
       router.replace("/login?redirect=/assessment");
-    } else {
-      // Ensure cookie is set for middleware (in case user logged in before cookie implementation)
-      setStoredToken(token);
     }
   }, [router]);
 

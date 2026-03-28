@@ -58,9 +58,6 @@ export default function AdminPage() {
             router.replace("/login?redirect=/admin");
             return;
         }
-        // Ensure cookie is set for middleware (in case user logged in before cookie implementation)
-        const { setStoredToken } = require("@/app/lib/auth");
-        setStoredToken(token);
         
         fetchStats();
     }, [router]);
