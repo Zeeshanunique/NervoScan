@@ -21,6 +21,16 @@ NervoScan context:
 - No audio/video recordings are stored on the server
 - Stress levels: Low (0-30), Moderate (30-50), High (50-70), Critical (70-100)
 
+CONTEXT-AWARE BEHAVIOR:
+- **USER Context**: When assisting regular users, focus on their personal stress data, trends, and personalized wellness recommendations.
+- **ADMIN Context**: When assisting an administrator (indicated by ADMIN DASHBOARD context), provide insights about:
+  - Platform-wide statistics and system health
+  - User engagement patterns and trends
+  - Data quality across all assessments
+  - Operational insights and recommendations
+  - Answer questions about total users, system stress averages, distribution patterns
+  - Suggest improvements for the platform based on data
+
 When provided with user data:
 - Reference specific numbers and patterns naturally in conversation
 - Acknowledge trends (improving/stable/worsening) and provide relevant guidance
@@ -30,7 +40,12 @@ When provided with user data:
 - If recommendations were given before, ask about their effectiveness
 - Be specific: "Your stress has improved from 65 to 45 over the last 3 assessments" instead of generic advice
 
-If asked about admin features, explain that admins can view user statistics, assessment history, stress distribution, and model accuracy on the admin dashboard.
+When in ADMIN context:
+- Speak as an administrative assistant
+- Provide system-wide insights and operational recommendations
+- Answer questions about user counts, platform trends, and data quality
+- Suggest improvements for user engagement or system features
+- Compare system metrics to best practices or benchmarks
 
 Always respond in the same language the user writes in.`;
 
@@ -44,16 +59,20 @@ export async function POST(req: NextRequest) {
             );
         }
 
-        const { message, history, token } = await req.json();
+        const { message, history, token, context } = await req.json();
         if (!message || typeof message !== "string") {
             return NextResponse.json({ reply: "Please provide a message.", suggestions: [] }, { status: 400 });
         }
+
+        const isAdminContext = context === "admin";
 
         // Fetch user data if token is provided
         let userContext = "";
         if (token) {
             try {
                 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+                
+                // Fetch personal user data
                 const userDataRes = await fetch(`${API_URL}/chatbot/user-context`, {
                     headers: { Authorization: `Bearer ${token}` },
                 });
@@ -119,9 +138,53 @@ export async function POST(req: NextRequest) {
                     }
                     
                     contextParts.push(`\n=== END USER DATA ===`);
-                    contextParts.push(`\nUse this data to provide HIGHLY PERSONALIZED insights. Reference specific numbers, trends, and patterns when relevant. Acknowledge improvements or concerns. Be supportive and specific.`);
                     
                     userContext = contextParts.join("\n");
+                }
+                
+                // If admin context, fetch system-wide statistics
+                if (isAdminContext) {
+                    const adminStatsRes = await fetch(`${API_URL}/admin/stats`, {
+                        headers: { Authorization: `Bearer ${token}` },
+                    });
+                    
+                    if (adminStatsRes.ok) {
+                        const adminData = await adminStatsRes.json();
+                        
+                        const adminContextParts = ["\n\n=== ADMIN SYSTEM-WIDE DATA ==="];
+                        adminContextParts.push(`🔐 Current Context: ADMIN DASHBOARD`);
+                        adminContextParts.push(`\n📊 System Statistics:`);
+                        adminContextParts.push(`- Total Users: ${adminData.total_users}`);
+                        adminContextParts.push(`- Total Assessments: ${adminData.total_assessments}`);
+                        adminContextParts.push(`- System Average Stress: ${adminData.avg_stress_score}/100`);
+                        
+                        if (adminData.level_distribution) {
+                            adminContextParts.push(`\n🎯 System-Wide Stress Distribution:`);
+                            for (const [level, count] of Object.entries(adminData.level_distribution)) {
+                                const percent = ((count as number) / adminData.total_assessments * 100).toFixed(1);
+                                adminContextParts.push(`- ${level}: ${count} (${percent}%)`);
+                            }
+                        }
+                        
+                        if (adminData.recent_assessments && adminData.recent_assessments.length > 0) {
+                            adminContextParts.push(`\n📋 Recent Activity:`);
+                            adminContextParts.push(`- Last ${adminData.recent_assessments.length} assessments from ${new Set(adminData.recent_assessments.map((a: any) => a.email || 'anonymous')).size} users`);
+                        }
+                        
+                        if (adminData.model_info) {
+                            adminContextParts.push(`\n🤖 ML Model Status:`);
+                            adminContextParts.push(`- Type: ${adminData.model_info.type}`);
+                            adminContextParts.push(`- Loaded: ${adminData.model_info.loaded ? 'Yes' : 'No'}`);
+                            if (adminData.model_info.accuracy) {
+                                adminContextParts.push(`- Accuracy: ${adminData.model_info.accuracy}%`);
+                            }
+                        }
+                        
+                        adminContextParts.push(`\n=== END ADMIN DATA ===`);
+                        adminContextParts.push(`\nYou are assisting an ADMIN user. Provide insights about system-wide patterns, user engagement, data quality, and administrative recommendations. You can answer questions about overall platform health, user trends, and operational insights.`);
+                        
+                        userContext += "\n" + adminContextParts.join("\n");
+                    }
                 }
             } catch (error) {
                 // Continue without user data if fetch fails

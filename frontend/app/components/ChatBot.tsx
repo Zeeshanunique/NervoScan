@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { usePathname } from "next/navigation";
 import { getLocale, t, type Locale } from "@/app/lib/i18n";
 
 
@@ -12,6 +13,7 @@ interface Message {
 }
 
 export default function ChatBot() {
+    const pathname = usePathname();
     const [locale, setLoc] = useState<Locale>("en");
     const [isOpen, setIsOpen] = useState(false);
     const [messages, setMessages] = useState<Message[]>([]);
@@ -66,6 +68,10 @@ export default function ChatBot() {
             const { getStoredToken } = require("@/app/lib/auth");
             const token = getStoredToken();
 
+            // Determine context based on current page
+            const isAdminPage = pathname?.startsWith("/admin");
+            const context = isAdminPage ? "admin" : "user";
+
             // Build history from previous messages (excluding suggestions)
             const history = messages
                 .filter((m) => m.role === "user" || m.role === "bot")
@@ -77,7 +83,8 @@ export default function ChatBot() {
                 body: JSON.stringify({ 
                     message: text.trim(), 
                     history,
-                    token: token || null  // Pass token to enable personalized context
+                    token: token || null,
+                    context: context  // Pass page context
                 }),
             });
 
