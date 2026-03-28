@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { getLocale, t, type Locale } from "@/app/lib/i18n";
+import { getStoredToken } from "@/app/lib/auth";
 import { AudioProcessor } from "@/app/lib/audio-processor";
 import { FaceProcessor } from "@/app/lib/face-processor";
 import { KeystrokeTracker } from "@/app/lib/keystroke-tracker";
